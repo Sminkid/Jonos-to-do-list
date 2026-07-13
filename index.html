@@ -3,15 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>~/dashboard</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230A0F1E'/%3E%3Cpath d='M6 8l4 4-4 4M13 16h5' stroke='%2322C55E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
+<title>New Tab</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' shape-rendering='crispEdges'%3E%3Crect width='14' height='14' fill='%230A0A14'/%3E%3Crect x='2' y='0' width='2' height='2' fill='%230E0D16'/%3E%3Crect x='10' y='0' width='2' height='2' fill='%230E0D16'/%3E%3Crect x='1' y='2' width='12' height='7' fill='%23F4F1FF'/%3E%3Crect x='2' y='5' width='2' height='2' fill='%230E0D16'/%3E%3Crect x='10' y='5' width='2' height='2' fill='%230E0D16'/%3E%3Crect x='5' y='9' width='4' height='1' fill='%230E0D16'/%3E%3Crect x='1' y='10' width='12' height='2' fill='%23F4F1FF'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="app">
     <header class="greeting">
-      <h1><span class="prompt">$</span> <span id="greetingText">Good afternoon</span><span class="cursor" aria-hidden="true"></span></h1>
-      <p class="datetime" id="dateTime"></p>
+      <div class="panda-mascot" id="pandaMascot" aria-hidden="true"></div>
+      <div class="greeting-text">
+        <h1 id="greetingText">Good afternoon</h1>
+        <p class="datetime" id="dateTime"></p>
+      </div>
     </header>
 
     <main class="board">
@@ -22,7 +25,7 @@
           <span class="count" id="today-count"></span>
         </div>
         <ul class="task-list" id="today-list" aria-label="Today's tasks"></ul>
-        <p class="empty-state">queue empty</p>
+        <p class="empty-state">Nothing here yet — add something!</p>
         <form class="add-form" data-section="today">
           <label class="visually-hidden" for="today-input" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Add a task to Today</label>
           <input type="text" id="today-input" placeholder="Add a task…" maxlength="200" autocomplete="off">
@@ -39,7 +42,7 @@
           <span class="count" id="upcoming-count"></span>
         </div>
         <ul class="task-list" id="upcoming-list" aria-label="Upcoming tasks"></ul>
-        <p class="empty-state">backlog empty</p>
+        <p class="empty-state">Nothing on the horizon yet.</p>
         <form class="add-form" data-section="upcoming">
           <label class="visually-hidden" for="upcoming-input" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Add a task to Upcoming</label>
           <input type="text" id="upcoming-input" placeholder="Add a task…" maxlength="200" autocomplete="off">
@@ -61,7 +64,7 @@
       <label class="task-check">
         <input type="checkbox">
         <span class="check-box" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="12" height="12" fill="none"><path d="M3 8.5L6.5 12L13 4.5" stroke="#0A0F1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" shape-rendering="crispEdges"><path d="M3 8L6 11L13 4" stroke="#0E0D16" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>
         </span>
         <span class="task-text"></span>
       </label>
@@ -76,17 +79,58 @@
   const STORAGE_KEY = 'newtab-dashboard-v1';
   const SECTIONS = ['today', 'upcoming'];
 
+  // 14x14 pixel-art panda face. '.' transparent, 'k' ink, 'w' white, 'p' blush.
+  const PANDA_PATTERN = [
+    '..kk......kk..',
+    '..kk......kk..',
+    '.wwwwwwwwwwww.',
+    'wwwwwwwwwwwwww',
+    'wwwwwwwwwwwwww',
+    'wwkkwwwwwwkkww',
+    'wwkkwwwwwwkkww',
+    'wwwwwwwwwwwwww',
+    'wwpwwwwwwwwpww',
+    'wwwwwkkkkwwwww',
+    'wwwwkkkkkkwwww',
+    '.wwwwwwwwwwww.',
+    '..wwwwwwwwww..',
+    '...wwwwwwww...'
+  ];
+  const PANDA_COLORS = { k: 'var(--panda-ink)', w: 'var(--panda-white)', p: 'var(--panda-blush)' };
+
+  function renderPixelArt(container, pattern, colorMap, cellSize) {
+    const cols = pattern[0].length;
+    container.style.gridTemplateColumns = 'repeat(' + cols + ', ' + cellSize + 'px)';
+    container.style.gridTemplateRows = 'repeat(' + pattern.length + ', ' + cellSize + 'px)';
+    container.innerHTML = '';
+    pattern.forEach(row => {
+      row.split('').forEach(ch => {
+        const cell = document.createElement('span');
+        cell.style.background = colorMap[ch] || 'transparent';
+        container.appendChild(cell);
+      });
+    });
+  }
+
+  function getDateString(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { today: [], upcoming: [] };
+      if (!raw) return { date: getDateString(new Date()), today: [], upcoming: [] };
       const parsed = JSON.parse(raw);
       return {
+        date: typeof parsed.date === 'string' ? parsed.date : getDateString(new Date()),
         today: Array.isArray(parsed.today) ? parsed.today : [],
         upcoming: Array.isArray(parsed.upcoming) ? parsed.upcoming : []
       };
     } catch (e) {
-      return { today: [], upcoming: [] };
+      return { date: getDateString(new Date()), today: [], upcoming: [] };
     }
   }
 
@@ -98,7 +142,16 @@
     return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
   }
 
+  function applyDayRollover() {
+    const todayStr = getDateString(new Date());
+    if (state.date === todayStr) return;
+    state.today = state.today.filter(task => !task.done);
+    state.date = todayStr;
+    saveState();
+  }
+
   const state = loadState();
+  applyDayRollover();
   const template = document.getElementById('task-template');
   const lists = {
     today: document.getElementById('today-list'),
@@ -246,6 +299,7 @@
   updateClock();
   setInterval(updateClock, 1000);
   renderAll();
+  renderPixelArt(document.getElementById('pandaMascot'), PANDA_PATTERN, PANDA_COLORS, 4);
 })();
 </script>
 </body>
