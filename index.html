@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>~/dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230A0F1E'/%3E%3Cpath d='M6 8l4 4-4 4M13 16h5' stroke='%2322C55E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="greeting">
+      <h1><span class="prompt">$</span> <span id="greetingText">Good afternoon</span><span class="cursor" aria-hidden="true"></span></h1>
+      <p class="datetime" id="dateTime"></p>
+    </header>
+
+    <main class="board">
+      <section class="column" data-section="today" aria-labelledby="today-heading">
+        <div class="column-header">
+          <span class="dot" aria-hidden="true"></span>
+          <h2 id="today-heading">Today</h2>
+          <span class="count" id="today-count"></span>
+        </div>
+        <ul class="task-list" id="today-list" aria-label="Today's tasks"></ul>
+        <p class="empty-state">queue empty</p>
+        <form class="add-form" data-section="today">
+          <label class="visually-hidden" for="today-input" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Add a task to Today</label>
+          <input type="text" id="today-input" placeholder="Add a task…" maxlength="200" autocomplete="off">
+          <button type="submit" aria-label="Add task to Today">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </form>
+      </section>
+
+      <section class="column" data-section="upcoming" aria-labelledby="upcoming-heading">
+        <div class="column-header">
+          <span class="dot" aria-hidden="true"></span>
+          <h2 id="upcoming-heading">Upcoming</h2>
+          <span class="count" id="upcoming-count"></span>
+        </div>
+        <ul class="task-list" id="upcoming-list" aria-label="Upcoming tasks"></ul>
+        <p class="empty-state">backlog empty</p>
+        <form class="add-form" data-section="upcoming">
+          <label class="visually-hidden" for="upcoming-input" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Add a task to Upcoming</label>
+          <input type="text" id="upcoming-input" placeholder="Add a task…" maxlength="200" autocomplete="off">
+          <button type="submit" aria-label="Add task to Upcoming">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span id="toastMessage"></span>
+    <button type="button" id="toastUndo">Undo</button>
+  </div>
+
+  <template id="task-template">
+    <li class="task">
+      <label class="task-check">
+        <input type="checkbox">
+        <span class="check-box" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none"><path d="M3 8.5L6.5 12L13 4.5" stroke="#0A0F1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="task-text"></span>
+      </label>
+      <button type="button" class="task-delete" aria-label="Delete task">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </li>
+  </template>
+
+<script>
+(function () {
+  const STORAGE_KEY = 'newtab-dashboard-v1';
+  const SECTIONS = ['today', 'upcoming'];
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { today: [], upcoming: [] };
+      const parsed = JSON.parse(raw);
+      return {
+        today: Array.isArray(parsed.today) ? parsed.today : [],
+        upcoming: Array.isArray(parsed.upcoming) ? parsed.upcoming : []
+      };
+    } catch (e) {
+      return { today: [], upcoming: [] };
+    }
+  }
+
+  function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function makeId() {
+    return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+  }
+
+  const state = loadState();
+  const template = document.getElementById('task-template');
+  const lists = {
+    today: document.getElementById('today-list'),
+    upcoming: document.getElementById('upcoming-list')
+  };
+  const counts = {
+    today: document.getElementById('today-count'),
+    upcoming: document.getElementById('upcoming-count')
+  };
+  const columns = {
+    today: document.querySelector('.column[data-section="today"]'),
+    upcoming: document.querySelector('.column[data-section="upcoming"]')
+  };
+
+  function render(section) {
+    const list = lists[section];
+    const tasks = state[section];
+    list.innerHTML = '';
+
+    tasks.forEach(task => {
+      const node = template.content.cloneNode(true);
+      const li = node.querySelector('.task');
+      const checkbox = node.querySelector('input[type="checkbox"]');
+      const text = node.querySelector('.task-text');
+      const deleteBtn = node.querySelector('.task-delete');
+
+      li.dataset.id = task.id;
+      checkbox.checked = task.done;
+      text.textContent = task.text;
+      deleteBtn.setAttribute('aria-label', 'Delete task: ' + task.text);
+
+      list.appendChild(node);
+    });
+
+    const remaining = tasks.filter(t => !t.done).length;
+    counts[section].textContent = tasks.length === 0 ? '' : (remaining === 0 ? 'All done' : remaining + ' left');
+    columns[section].classList.toggle('is-empty', tasks.length === 0);
+  }
+
+  function renderAll() {
+    SECTIONS.forEach(render);
+  }
+
+  function addTask(section, text) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    state[section].unshift({ id: makeId(), text: trimmed, done: false });
+    saveState();
+    render(section);
+  }
+
+  function toggleTask(section, id) {
+    const task = state[section].find(t => t.id === id);
+    if (!task) return;
+    task.done = !task.done;
+    saveState();
+    render(section);
+  }
+
+  let pendingDelete = null;
+  let toastTimer = null;
+  const toast = document.getElementById('toast');
+  const toastMessage = document.getElementById('toastMessage');
+  const toastUndo = document.getElementById('toastUndo');
+
+  function deleteTask(section, id) {
+    const index = state[section].findIndex(t => t.id === id);
+    if (index === -1) return;
+    const [removed] = state[section].splice(index, 1);
+    saveState();
+    render(section);
+    showUndoToast(section, removed, index);
+  }
+
+  function showUndoToast(section, task, index) {
+    pendingDelete = { section, task, index };
+    toastMessage.textContent = 'Task deleted';
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 5000);
+  }
+
+  function hideToast() {
+    toast.classList.remove('show');
+    pendingDelete = null;
+  }
+
+  toastUndo.addEventListener('click', () => {
+    if (!pendingDelete) return;
+    const { section, task, index } = pendingDelete;
+    state[section].splice(Math.min(index, state[section].length), 0, task);
+    saveState();
+    render(section);
+    clearTimeout(toastTimer);
+    hideToast();
+  });
+
+  SECTIONS.forEach(section => {
+    const list = lists[section];
+
+    list.addEventListener('change', e => {
+      if (e.target.matches('input[type="checkbox"]')) {
+        const li = e.target.closest('.task');
+        toggleTask(section, li.dataset.id);
+      }
+    });
+
+    list.addEventListener('click', e => {
+      const btn = e.target.closest('.task-delete');
+      if (btn) {
+        const li = btn.closest('.task');
+        deleteTask(section, li.dataset.id);
+      }
+    });
+
+    const form = document.querySelector('.add-form[data-section="' + section + '"]');
+    const input = form.querySelector('input[type="text"]');
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      addTask(section, input.value);
+      input.value = '';
+      input.focus();
+    });
+  });
+
+  function getGreeting(hour) {
+    if (hour < 5) return 'Still up?';
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    if (hour < 22) return 'Good evening';
+    return 'Good night';
+  }
+
+  const greetingEl = document.getElementById('greetingText');
+  const dateTimeEl = document.getElementById('dateTime');
+  const dateFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+
+  function updateClock() {
+    const now = new Date();
+    greetingEl.textContent = getGreeting(now.getHours());
+    dateTimeEl.textContent = dateFormatter.format(now) + '  ·  ' + timeFormatter.format(now);
+  }
+
+  updateClock();
+  setInterval(updateClock, 1000);
+  renderAll();
+})();
+</script>
+</body>
+</html>
