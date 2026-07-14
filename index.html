@@ -10,7 +10,6 @@
 <body>
   <div class="app">
     <header class="greeting">
-      <div class="panda-mascot" id="pandaMascot" aria-hidden="true"></div>
       <div class="greeting-text">
         <h1 id="greetingText">Good afternoon</h1>
         <p class="datetime" id="dateTime"></p>
@@ -28,7 +27,8 @@
         <p class="empty-state">Nothing here yet — add something!</p>
         <form class="add-form" data-section="today">
           <label class="visually-hidden" for="today-input" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Add a task to Today</label>
-          <input type="text" id="today-input" placeholder="Add a task…" maxlength="200" autocomplete="off">
+          <input type="text" id="today-input" placeholder="
+          Add a task…" maxlength="200" autocomplete="off">
           <button type="submit" aria-label="Add task to Today">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
@@ -79,39 +79,6 @@
   const STORAGE_KEY = 'newtab-dashboard-v1';
   const SECTIONS = ['today', 'upcoming'];
 
-  // 14x14 pixel-art panda face. '.' transparent, 'k' ink, 'w' white, 'p' blush.
-  const PANDA_PATTERN = [
-    '..kk......kk..',
-    '..kk......kk..',
-    '.wwwwwwwwwwww.',
-    'wwwwwwwwwwwwww',
-    'wwwwwwwwwwwwww',
-    'wwkkwwwwwwkkww',
-    'wwkkwwwwwwkkww',
-    'wwwwwwwwwwwwww',
-    'wwpwwwwwwwwpww',
-    'wwwwwkkkkwwwww',
-    'wwwwkkkkkkwwww',
-    '.wwwwwwwwwwww.',
-    '..wwwwwwwwww..',
-    '...wwwwwwww...'
-  ];
-  const PANDA_COLORS = { k: 'var(--panda-ink)', w: 'var(--panda-white)', p: 'var(--panda-blush)' };
-
-  function renderPixelArt(container, pattern, colorMap, cellSize) {
-    const cols = pattern[0].length;
-    container.style.gridTemplateColumns = 'repeat(' + cols + ', ' + cellSize + 'px)';
-    container.style.gridTemplateRows = 'repeat(' + pattern.length + ', ' + cellSize + 'px)';
-    container.innerHTML = '';
-    pattern.forEach(row => {
-      row.split('').forEach(ch => {
-        const cell = document.createElement('span');
-        cell.style.background = colorMap[ch] || 'transparent';
-        container.appendChild(cell);
-      });
-    });
-  }
-
   function getDateString(date) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -153,6 +120,7 @@
   const state = loadState();
   applyDayRollover();
   const template = document.getElementById('task-template');
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const lists = {
     today: document.getElementById('today-list'),
     upcoming: document.getElementById('upcoming-list')
@@ -166,29 +134,50 @@
     upcoming: document.querySelector('.column[data-section="upcoming"]')
   };
 
+  function createTaskNode(task) {
+    const node = template.content.cloneNode(true);
+    const li = node.querySelector('.task');
+    const checkbox = node.querySelector('input[type="checkbox"]');
+    const text = node.querySelector('.task-text');
+    const deleteBtn = node.querySelector('.task-delete');
+
+    li.dataset.id = task.id;
+    checkbox.checked = task.done;
+    text.textContent = task.text;
+    deleteBtn.setAttribute('aria-label', 'Delete task: ' + task.text);
+    return li;
+  }
+
+  function updateCount(section) {
+    const tasks = state[section];
+    const remaining = tasks.filter(t => !t.done).length;
+    counts[section].textContent = tasks.length === 0 ? '' : (remaining === 0 ? 'All done' : remaining + ' left');
+  }
+
+  function updateEmptyState(section) {
+    columns[section].classList.toggle('is-empty', state[section].length === 0);
+  }
+
+  function updateMeta(section) {
+    updateCount(section);
+    updateEmptyState(section);
+  }
+
   function render(section) {
     const list = lists[section];
     const tasks = state[section];
     list.innerHTML = '';
 
-    tasks.forEach(task => {
-      const node = template.content.cloneNode(true);
-      const li = node.querySelector('.task');
-      const checkbox = node.querySelector('input[type="checkbox"]');
-      const text = node.querySelector('.task-text');
-      const deleteBtn = node.querySelector('.task-delete');
-
-      li.dataset.id = task.id;
-      checkbox.checked = task.done;
-      text.textContent = task.text;
-      deleteBtn.setAttribute('aria-label', 'Delete task: ' + task.text);
-
-      list.appendChild(node);
+    tasks.forEach((task, i) => {
+      const li = createTaskNode(task);
+      if (!prefersReducedMotion) {
+        li.classList.add('task-enter');
+        li.style.animationDelay = Math.min(i * 35, 350) + 'ms';
+      }
+      list.appendChild(li);
     });
 
-    const remaining = tasks.filter(t => !t.done).length;
-    counts[section].textContent = tasks.length === 0 ? '' : (remaining === 0 ? 'All done' : remaining + ' left');
-    columns[section].classList.toggle('is-empty', tasks.length === 0);
+    updateMeta(section);
   }
 
   function renderAll() {
@@ -198,9 +187,14 @@
   function addTask(section, text) {
     const trimmed = text.trim();
     if (!trimmed) return;
-    state[section].unshift({ id: makeId(), text: trimmed, done: false });
+    const task = { id: makeId(), text: trimmed, done: false };
+    state[section].unshift(task);
     saveState();
-    render(section);
+
+    const li = createTaskNode(task);
+    if (!prefersReducedMotion) li.classList.add('task-enter');
+    lists[section].prepend(li);
+    updateMeta(section);
   }
 
   function toggleTask(section, id) {
@@ -208,7 +202,7 @@
     if (!task) return;
     task.done = !task.done;
     saveState();
-    render(section);
+    updateCount(section);
   }
 
   let pendingDelete = null;
@@ -222,7 +216,25 @@
     if (index === -1) return;
     const [removed] = state[section].splice(index, 1);
     saveState();
-    render(section);
+    updateCount(section);
+
+    const li = lists[section].querySelector('.task[data-id="' + id + '"]');
+    if (li && !prefersReducedMotion) {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        li.remove();
+        updateEmptyState(section);
+      };
+      li.addEventListener('animationend', finish, { once: true });
+      setTimeout(finish, 260);
+      li.classList.add('task-exit');
+    } else {
+      if (li) li.remove();
+      updateEmptyState(section);
+    }
+
     showUndoToast(section, removed, index);
   }
 
@@ -299,7 +311,6 @@
   updateClock();
   setInterval(updateClock, 1000);
   renderAll();
-  renderPixelArt(document.getElementById('pandaMascot'), PANDA_PATTERN, PANDA_COLORS, 4);
 })();
 </script>
 </body>
